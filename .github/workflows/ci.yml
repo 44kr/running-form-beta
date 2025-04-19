@@ -1,11 +1,33 @@
-name: simple-check
+name: flutter-ci          # ワークフロー表示名。好きな名前で可
 
-on: [push]
+on:
+  push:                   # main に push したら自動実行
+    branches: [ main ]
+  pull_request:           # PR を作ったときも実行したい場合
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
+      # ① リポジトリのコードを取ってくる
       - uses: actions/checkout@v4
-      - name: hello
-        run: echo "GitHub Actions is working!"
+
+      # ② Flutter 環境を入れる（公式アクション）
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2      # 公開済み CI 用 Action :contentReference[oaicite:0]{index=0}
+        with:
+          flutter-version: '3.22.0'          # 安定版の最新。特定バージョンでも OK
+
+      # ③ 依存パッケージを取得
+      - name: Install pub dependencies
+        run: flutter pub get
+
+      # ④ 静的解析（コードにバグがないかチェック）
+      - name: Static analysis
+        run: flutter analyze --no-fatal-warnings
+
+      # ⑤ 単体テスト（まだテストが無い場合でも成功判定になる）
+      - name: Run unit tests
+        run: flutter test
