@@ -1,14 +1,88 @@
-name: Flutter CI
-on: [push]
+# Flutter multi‑platform CI / CD ‑‑ 対象ブランチ: main と dev
+name: Flutter CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+env:
+  # 固定値はここで一括管理すると後で楽
+  FLUTTER_VERSION: "3.19.0"
+  CHANNEL: stable
+
 jobs:
-  build:
+  # ──────────────────────────
+  android-build-test:
+    name: Android ‑ build & test
     runs-on: ubuntu-latest
+
     steps:
+      # 1) リポジトリを取ってくる
       - uses: actions/checkout@v4
+
+      # 2) Flutter を入れる
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.x"
-      - run: flutter pub get
-        working-directory: .
-      - run: flutter analyze
-        working-directory: .
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: ${{ env.CHANNEL }}
+
+      # 3) 依存取得
+      - name: flutter pub get
+        run: flutter pub get
+
+      # 4) フォーマット崩れチェック（崩れてたらエラー）
+      - name: flutter format
+        run: flutter format --set-exit-if-changed .
+
+      # 5) 静的解析
+      - name: flutter analyze
+        run: flutter analyze --no-fatal-infos
+
+      # 6) 単体テスト
+      - name: flutter test
+        run: flutter test --coverage
+
+      # 7) デバッグ APK をビルド
+      - name: flutter build apk
+        run: flutter build apk --debug
+
+      # 8) ビルド成果物をアップロード（あとでダウンロード可）
+      - name: upload apk artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: build/app/outputs/flutter-apk/app-debug.apk
+
+  # ──────────────────────────
+  ios-build:
+    name: iOS ‑ build (no codesign)
+    # iOS は macOS ランナーが必須
+    runs-on: macos-latest
+    needs: android-build-test   # Android が通ったら実行
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: ${{ env.CHANNEL }}
+
+      - name: flutter pub get
+        run: flutter pub get
+
+      # iOS シミュレータ向けビルド。署名不要なので --no-codesign
+      - name: flutter build ios
+        run: flutter build ios --no-codesign
+
+      - name: upload ios artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build
+          path: build/ios/iphoneos
+
+  # ──────────────────────────
+  # 追加で Web や Windows をビルドしたい場合は
+  # ↑と同じ構成でジョブを増やすだけ
